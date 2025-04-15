@@ -78,8 +78,8 @@ const saveToMongoDB = async (data) => {
 // Load active generators (mocked or from an API)
 const loadActiveGenerators = async () => {
   const mockGenerators = [
-    { genId: 'G-0032', baseName: 'Colombo-Keels' },
-    { genId: 'G-0034', baseName: 'Trincomalee-Keels' },
+    { genId: 'G-0032', baseName: 'Susa-Keels' },
+    { genId: 'G-0034', baseName: 'Trinco-Keels' },
     { genId: 'G-0035', baseName: 'Jaffna-Keels' },
   ];
   mockGenerators.forEach(({ genId, baseName }) => {
