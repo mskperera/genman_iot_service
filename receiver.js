@@ -33,6 +33,7 @@ const GRACE_PERIOD = 12000;
 // State
 const subscriptionPool = new Set(); // Track active generator IDs
 const deviceStatusMap = {}; // Last update timestamp per generator
+const generatorNameMap = new Map(); // Map genId to baseName for frontend
 let heartbeatTimer;
 
 // Determine anomalies based on temperature and battery
@@ -76,11 +77,16 @@ const saveToMongoDB = async (data) => {
 
 // Load active generators (mocked or from an API)
 const loadActiveGenerators = async () => {
-  const mockGenerators = ['G-0032', 'G-0034', 'G-0035'];
-  mockGenerators.forEach((id) => {
-    subscriptionPool.add(id);
+  const mockGenerators = [
+    { genId: 'G-0032', baseName: 'Colombo-Keels' },
+    { genId: 'G-0034', baseName: 'Trincomalee-Keels' },
+    { genId: 'G-0035', baseName: 'Jaffna-Keels' },
+  ];
+  mockGenerators.forEach(({ genId, baseName }) => {
+    subscriptionPool.add(genId);
+    generatorNameMap.set(genId, baseName); // Store mapping for frontend
     // Initialize deviceStatusMap with a very old timestamp to mark as offline
-    deviceStatusMap[id] = 0;
+    deviceStatusMap[genId] = 0;
   });
   console.log('Loaded active generators:', Array.from(subscriptionPool));
 };
@@ -123,7 +129,11 @@ io.on('connection', (socket) => {
       const now = Date.now();
       const lastTimestamp = deviceStatusMap[generatorId] || 0;
       const status = now - lastTimestamp <= GRACE_PERIOD ? 'online' : 'offline';
-      socket.emit('generatorStatus', { generatorId, status });
+      socket.emit('generatorStatus', {
+        generatorId,
+        name: generatorNameMap.get(generatorId) || generatorId, // Use baseName for frontend
+        status,
+      });
     } catch (error) {
       socket.emit('error', { message: 'Failed to subscribe to generator' });
       console.error('Socket error:', error);
@@ -155,6 +165,7 @@ mqttClient.on('connect', async () => {
   });
 });
 
+// MQTT message handler
 mqttClient.on('message', async (topic, message) => {
   try {
     const dataMatch = topic.match(/generator\/([A-Z0-9-]+)\/data/);
@@ -169,6 +180,7 @@ mqttClient.on('message', async (topic, message) => {
         const anomalies = detectAnomalies(payload.temperature, payload.batteryLevel);
         const enrichedPayload = {
           ...payload,
+          name: generatorNameMap.get(generatorId) || generatorId, // Replace name with baseName
           anomalies,
         };
 
@@ -182,6 +194,7 @@ mqttClient.on('message', async (topic, message) => {
         console.log(`realtimeData emit`, generatorId);
         io.to(generatorId).emit('realtimeData', {
           generatorId,
+          name: generatorNameMap.get(generatorId) || generatorId, // Use baseName for frontend
           data: enrichedPayload,
           status: 'online',
         });
@@ -212,7 +225,11 @@ const updateGeneratorStatuses = () => {
   subscriptionPool.forEach((generatorId) => {
     const lastTimestamp = deviceStatusMap[generatorId] || 0;
     const status = now - lastTimestamp <= GRACE_PERIOD ? 'online' : 'offline';
-    io.to(generatorId).emit('generatorStatus', { generatorId, status });
+    io.to(generatorId).emit('generatorStatus', {
+      generatorId,
+      name: generatorNameMap.get(generatorId) || generatorId, // Use baseName for frontend
+      status,
+    });
     console.log(`Generator ${generatorId} status: ${status}`);
   });
 };
